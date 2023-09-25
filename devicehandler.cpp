@@ -1,5 +1,6 @@
 #include <QDebug>
 #include <QtEndian>
+#include <QDateTime>
 
 #include <devicehandler.h>
 #include <deviceinfo.h>
@@ -83,7 +84,8 @@ void DeviceHandler::serviceStateChanged(QLowEnergyService::ServiceState s)
     {
         qDebug() << "Service discovered.";
 
-        const QLowEnergyCharacteristic time = m_service->characteristic(QBluetoothUuid(QBluetoothUuid::DateTime));
+//        const QLowEnergyCharacteristic battaryChar = m_service->characteristic(QBluetoothUuid(QBluetoothUuid::BatteryService));
+        const QLowEnergyCharacteristic timeChar = m_service->characteristic(QBluetoothUuid(QBluetoothUuid::DateTime));
         const QLowEnergyCharacteristic hrChar = m_service->characteristic(QBluetoothUuid(QBluetoothUuid::BloodPressureMeasurement));
 
         if (!hrChar.isValid()) {
@@ -91,13 +93,15 @@ void DeviceHandler::serviceStateChanged(QLowEnergyService::ServiceState s)
             break;
         }
 
-        m_service->writeCharacteristic(time, "");
+        QDateTime currentDateTime = QDateTime::currentDateTime();
+        QByteArray dateTimeBytes;
+
+        dateTimeBytes.append(currentDateTime.toString(Qt::ISODate).toUtf8());
+        m_service->writeCharacteristic(timeChar, dateTimeBytes);
 
         m_notificationDesc = hrChar.descriptor(QBluetoothUuid::ClientCharacteristicConfiguration);
         if (m_notificationDesc.isValid())
             m_service->writeDescriptor(m_notificationDesc, "10");
-
-        qDebug() << m_notificationDesc.value() << time.value();
 
         break;
     }
