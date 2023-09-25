@@ -84,7 +84,6 @@ void DeviceHandler::serviceStateChanged(QLowEnergyService::ServiceState s)
     {
         qDebug() << "Service discovered.";
 
-//        const QLowEnergyCharacteristic battaryChar = m_service->characteristic(QBluetoothUuid(QBluetoothUuid::BatteryService));
         const QLowEnergyCharacteristic timeChar = m_service->characteristic(QBluetoothUuid(QBluetoothUuid::DateTime));
         const QLowEnergyCharacteristic hrChar = m_service->characteristic(QBluetoothUuid(QBluetoothUuid::BloodPressureMeasurement));
 
@@ -112,22 +111,27 @@ void DeviceHandler::serviceStateChanged(QLowEnergyService::ServiceState s)
 
 void DeviceHandler::updateBloodPressureValue(const QLowEnergyCharacteristic &c, const QByteArray &value)
 {
-    qDebug() << c.uuid() << QBluetoothUuid(QBluetoothUuid::BloodPressureMeasurement) << c.name();
-    // ignore any other characteristic change -> shouldn't really happen though
     if (c.uuid() != QBluetoothUuid(QBluetoothUuid::BloodPressureMeasurement))
         return;
 
     auto data = reinterpret_cast<const quint8 *>(value.constData());
     quint8 flags = *data;
 
-    //Blood pressure
-    int hrvalue = 0;
-    if (flags & 0x1) // HR 16 bit? otherwise 8 bit
-        hrvalue = static_cast<int>(qFromLittleEndian<quint16>(data[1]));
-    else
-        hrvalue = static_cast<int>(data[1]);
+    int sysValue = 0;
+    int diaValue = 0;
+    int pulValue = 0;
 
-    qDebug() << hrvalue;
+    if (flags & 0x1) {
+        sysValue = static_cast<int>(qFromLittleEndian<quint16>(data[1]));
+        diaValue = static_cast<int>(qFromLittleEndian<quint16>(data[3]));
+        pulValue = static_cast<int>(qFromLittleEndian<quint16>(data[7]));
+    } else {
+        sysValue = static_cast<int>(data[1]);
+        diaValue = static_cast<int>(data[3]);
+        pulValue = static_cast<int>(data[7]);
+    }
+
+    qDebug() << sysValue << diaValue << pulValue;
 }
 
 void DeviceHandler::confirmedDescriptorWrite(const QLowEnergyDescriptor &d, const QByteArray &value)
