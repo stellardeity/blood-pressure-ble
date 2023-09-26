@@ -114,6 +114,8 @@ void DeviceHandler::updateBloodPressureValue(const QLowEnergyCharacteristic &c, 
     if (c.uuid() != QBluetoothUuid(QBluetoothUuid::BloodPressureMeasurement))
         return;
 
+    QString currentDateTime = QDateTime::currentDateTime().toTimeSpec(Qt::LocalTime).toString(Qt::ISODate);
+
     auto data = reinterpret_cast<const quint8 *>(value.constData());
     quint8 flags = *data;
 
@@ -131,7 +133,10 @@ void DeviceHandler::updateBloodPressureValue(const QLowEnergyCharacteristic &c, 
         pulValue = static_cast<int>(data[7]);
     }
 
-    qDebug() << sysValue << diaValue << pulValue;
+    qDebug() << "SYS: " << sysValue;
+    qDebug() << "DIA: " << diaValue;
+    qDebug() << "PUL" << pulValue;
+    qDebug() << "Date and time: " << currentDateTime;
 }
 
 void DeviceHandler::confirmedDescriptorWrite(const QLowEnergyDescriptor &d, const QByteArray &value)
