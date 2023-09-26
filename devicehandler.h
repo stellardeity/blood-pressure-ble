@@ -5,20 +5,22 @@
 #include <QObject>
 
 #include <deviceinfo.h>
+#include <bluetoothbaseclass.h>
 
-class DeviceHandler : public QObject
+class DeviceHandler : public BluetoothBaseClass
 {
 public:
-    DeviceHandler();
+    DeviceHandler(QObject *parent = nullptr);
 
     void setDevice(DeviceInfo *device);
 
+    // not used
+    void disconnectService();
+
 private:
-    //QLowEnergyController
     void serviceDiscovered(const QBluetoothUuid &);
     void serviceScanDone();
 
-    //QLowEnergyService
     void serviceStateChanged(QLowEnergyService::ServiceState s);
     void updateBloodPressureValue(const QLowEnergyCharacteristic &c,
                               const QByteArray &value);
@@ -31,6 +33,11 @@ private:
     DeviceInfo *m_currentDevice = nullptr;
     QLowEnergyController *m_control = nullptr;
     QLowEnergyService *m_service = nullptr;
+
+
+    int m_sys = 0;
+    int m_dia = 0;
+    int m_pul = 0;
 };
 
 #endif // DEVICEHANDLER_H

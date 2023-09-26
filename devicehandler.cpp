@@ -1,11 +1,12 @@
-#include <QDebug>
 #include <QtEndian>
 #include <QDateTime>
 
 #include <devicehandler.h>
 #include <deviceinfo.h>
 
-DeviceHandler::DeviceHandler()
+DeviceHandler::DeviceHandler(QObject *parent) :
+    BluetoothBaseClass(parent),
+    m_foundBloodPressureService(false)
 {
 }
 
@@ -13,14 +14,12 @@ void DeviceHandler::setDevice(DeviceInfo *device)
 {
     m_currentDevice = device;
 
-    // Disconnect and delete old connection
     if (m_control) {
         m_control->disconnectFromDevice();
         delete m_control;
         m_control = nullptr;
     }
 
-    // Create new controller and connect it if device available
     if (m_currentDevice) {
         m_control = QLowEnergyController::createCentral(m_currentDevice->getDevice(), this);
         connect(m_control, &QLowEnergyController::serviceDiscovered,
@@ -31,14 +30,14 @@ void DeviceHandler::setDevice(DeviceInfo *device)
         connect(m_control, static_cast<void (QLowEnergyController::*)(QLowEnergyController::Error)>(&QLowEnergyController::error),
                 this, [this](QLowEnergyController::Error error) {
             Q_UNUSED(error);
-            qWarning() << "Cannot connect to remote device.";
+            setError("Cannot connect to remote device.");
         });
         connect(m_control, &QLowEnergyController::connected, this, [this]() {
-            qInfo() << "Controller connected. Search services...";
+            setInfo("Controller connected. Search services...");
             m_control->discoverServices();
         });
         connect(m_control, &QLowEnergyController::disconnected, this, [this]() {
-            qWarning() << "LowEnergy controller disconnected";
+            setError("LowEnergy controller disconnected");
         });
 
         m_control->connectToDevice();
@@ -48,14 +47,13 @@ void DeviceHandler::setDevice(DeviceInfo *device)
 void DeviceHandler::serviceDiscovered(const QBluetoothUuid &gatt)
 {
     if (gatt ==  QBluetoothUuid(QBluetoothUuid::BloodPressure)) {
-        qDebug() << "Blood pressure service discovered. Waiting for service scan to be done...";
+         setInfo("Blood pressure service discovered. Waiting for service scan to be done...");
         m_foundBloodPressureService = true;
     }
 }
 
 void DeviceHandler::serviceScanDone()
 {
-    // Delete old service if available
     if (m_service) {
         delete m_service;
         m_service = nullptr;
@@ -70,7 +68,7 @@ void DeviceHandler::serviceScanDone()
         connect(m_service, &QLowEnergyService::descriptorWritten, this, &DeviceHandler::confirmedDescriptorWrite);
         m_service->discoverDetails();
     } else {
-        qWarning() << "Service not found.";
+        setError("Blood pressure service not found.");
     }
 }
 
@@ -78,17 +76,17 @@ void DeviceHandler::serviceStateChanged(QLowEnergyService::ServiceState s)
 {
     switch (s) {
     case QLowEnergyService::DiscoveringServices:
-        qDebug() << "Discovering services...";
+        setInfo(tr("Discovering services..."));
         break;
     case QLowEnergyService::ServiceDiscovered:
     {
-        qDebug() << "Service discovered.";
+        setInfo(tr("Service discovered."));
 
         const QLowEnergyCharacteristic timeChar = m_service->characteristic(QBluetoothUuid(QBluetoothUuid::DateTime));
-        const QLowEnergyCharacteristic hrChar = m_service->characteristic(QBluetoothUuid(QBluetoothUuid::BloodPressureMeasurement));
+        const QLowEnergyCharacteristic bpChar = m_service->characteristic(QBluetoothUuid(QBluetoothUuid::BloodPressureMeasurement));
 
-        if (!hrChar.isValid()) {
-            qWarning() << "HR Data not found.";
+        if (!bpChar.isValid()) {
+            setError("Blood pressure measurement data not found.");
             break;
         }
 
@@ -98,7 +96,7 @@ void DeviceHandler::serviceStateChanged(QLowEnergyService::ServiceState s)
         dateTimeBytes.append(currentDateTime.toString(Qt::ISODate).toUtf8());
         m_service->writeCharacteristic(timeChar, dateTimeBytes);
 
-        m_notificationDesc = hrChar.descriptor(QBluetoothUuid::ClientCharacteristicConfiguration);
+        m_notificationDesc = bpChar.descriptor(QBluetoothUuid::ClientCharacteristicConfiguration);
         if (m_notificationDesc.isValid())
             m_service->writeDescriptor(m_notificationDesc, "10");
 
@@ -119,30 +117,41 @@ void DeviceHandler::updateBloodPressureValue(const QLowEnergyCharacteristic &c, 
     auto data = reinterpret_cast<const quint8 *>(value.constData());
     quint8 flags = *data;
 
-    int sysValue = 0;
-    int diaValue = 0;
-    int pulValue = 0;
-
     if (flags & 0x1) {
-        sysValue = static_cast<int>(qFromLittleEndian<quint16>(data[1]));
-        diaValue = static_cast<int>(qFromLittleEndian<quint16>(data[3]));
-        pulValue = static_cast<int>(qFromLittleEndian<quint16>(data[7]));
+        m_sys = static_cast<int>(qFromLittleEndian<quint16>(data[1]));
+        m_dia = static_cast<int>(qFromLittleEndian<quint16>(data[3]));
+        m_pul = static_cast<int>(qFromLittleEndian<quint16>(data[7]));
     } else {
-        sysValue = static_cast<int>(data[1]);
-        diaValue = static_cast<int>(data[3]);
-        pulValue = static_cast<int>(data[7]);
+        m_sys = static_cast<int>(data[1]);
+        m_dia = static_cast<int>(data[3]);
+        m_pul = static_cast<int>(data[7]);
     }
 
-    qDebug() << "SYS: " << sysValue;
-    qDebug() << "DIA: " << diaValue;
-    qDebug() << "PUL" << pulValue;
-    qDebug() << "Date and time: " << currentDateTime;
+    setInfo("SYS: " + QString::number(m_sys));
+    setInfo("DIA: " + QString::number(m_dia));
+    setInfo("PUL: " + QString::number(m_pul));
+    setInfo("Date and time: " + currentDateTime);
+}
+
+void DeviceHandler::disconnectService()
+{
+    m_foundBloodPressureService = false;
+
+    if (m_notificationDesc.isValid() && m_service
+            && m_notificationDesc.value() == QByteArray::fromHex("10")) {
+        m_service->writeDescriptor(m_notificationDesc, QByteArray::fromHex("0000"));
+    } else {
+        if (m_control)
+            m_control->disconnectFromDevice();
+
+        delete m_service;
+        m_service = nullptr;
+    }
 }
 
 void DeviceHandler::confirmedDescriptorWrite(const QLowEnergyDescriptor &d, const QByteArray &value)
 {
     if (d.isValid() && d == m_notificationDesc && value == QByteArray::fromHex("0000")) {
-        //disabled notifications -> assume disconnect intent
         m_control->disconnectFromDevice();
         delete m_service;
         m_service = nullptr;

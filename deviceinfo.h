@@ -12,6 +12,7 @@ public:
     QString getName() const;
     QString getAddress() const;
     QBluetoothDeviceInfo getDevice() const;
+
 private:
     QBluetoothDeviceInfo m_device;
 };

@@ -1,42 +1,48 @@
-#include <QDebug>
-
 #include <deviceinfo.h>
 #include <devicefinder.h>
 
-DeviceFinder::DeviceFinder(DeviceHandler *handler) : m_deviceHandler(handler)
+DeviceFinder::DeviceFinder(DeviceHandler *handler, QObject *parent):
+    BluetoothBaseClass(parent),
+    m_deviceHandler(handler)
 {
-    discoveryAgent = new QBluetoothDeviceDiscoveryAgent();
-    discoveryAgent->setLowEnergyDiscoveryTimeout(5000);
-    connect(discoveryAgent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
+    m_deviceDiscoveryAgent = new QBluetoothDeviceDiscoveryAgent();
+    m_deviceDiscoveryAgent->setLowEnergyDiscoveryTimeout(5000);
+    connect(m_deviceDiscoveryAgent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
             this, &DeviceFinder::addDevice);
-    connect(discoveryAgent, QOverload<QBluetoothDeviceDiscoveryAgent::Error>::of(&QBluetoothDeviceDiscoveryAgent::error),
+    connect(m_deviceDiscoveryAgent, QOverload<QBluetoothDeviceDiscoveryAgent::Error>::of(&QBluetoothDeviceDiscoveryAgent::error),
             this, &DeviceFinder::scanError);
-    connect(discoveryAgent, &QBluetoothDeviceDiscoveryAgent::finished, this, &DeviceFinder::scanFinished);
-}
-
-DeviceFinder::~DeviceFinder()
-{
+    connect(m_deviceDiscoveryAgent, &QBluetoothDeviceDiscoveryAgent::finished, this, &DeviceFinder::scanFinished);
 }
 
 void DeviceFinder::startDeviceDiscovery()
 {
-    discoveryAgent->start(QBluetoothDeviceDiscoveryAgent::LowEnergyMethod);
+    clearMessages();
+    m_deviceHandler->setDevice(nullptr);
+
+    m_deviceDiscoveryAgent->start(QBluetoothDeviceDiscoveryAgent::LowEnergyMethod);
+    setInfo(tr("Scanning for devices..."));
 }
 
 void DeviceFinder::addDevice(const QBluetoothDeviceInfo &device)
 {
     if (device.coreConfigurations() & QBluetoothDeviceInfo::LowEnergyCoreConfiguration) {
-        DeviceInfo *currentDevice = new DeviceInfo(device);
-        m_deviceHandler->setDevice(currentDevice);
+        m_currentDevice = new DeviceInfo(device);
+        m_deviceHandler->setDevice(m_currentDevice);
     }
 }
 
 void DeviceFinder::scanError(QBluetoothDeviceDiscoveryAgent::Error error)
 {
-    qDebug() << "Scan error";
+    if (error == QBluetoothDeviceDiscoveryAgent::PoweredOffError)
+        setError(tr("The Bluetooth adaptor is powered off."));
+    else if (error == QBluetoothDeviceDiscoveryAgent::InputOutputError)
+        setError(tr("Writing or reading from the device resulted in an error."));
+    else
+        setError(tr("An unknown error has occurred."));
 }
 
 void DeviceFinder::scanFinished()
 {
-    qDebug() << "Scan finished";
+    setInfo(tr("Scanning done."));
 }
+

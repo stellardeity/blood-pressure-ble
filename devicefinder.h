@@ -5,21 +5,24 @@
 #include <QBluetoothDeviceDiscoveryAgent>
 
 #include <devicehandler.h>
+#include <bluetoothbaseclass.h>
 
-class DeviceFinder: public QObject
+class DeviceFinder: public BluetoothBaseClass
 {
+    Q_OBJECT
 public:
-    DeviceFinder(DeviceHandler *handler);
-    ~DeviceFinder();
-public slots:
+    DeviceFinder(DeviceHandler *handler, QObject *parent = nullptr);
+
     void startDeviceDiscovery();
-private slots:
+
+private:
     void addDevice(const QBluetoothDeviceInfo&);
     void scanError(QBluetoothDeviceDiscoveryAgent::Error error);
     void scanFinished();
-private:
-    QBluetoothDeviceDiscoveryAgent *discoveryAgent;
+
+    QBluetoothDeviceDiscoveryAgent *m_deviceDiscoveryAgent;
     DeviceHandler *m_deviceHandler;
+    DeviceInfo *m_currentDevice;
 };
 
 #endif // DEVICEFINDER_H
