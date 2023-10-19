@@ -117,6 +117,21 @@ void DeviceHandler::updateBloodPressureValue(const QLowEnergyCharacteristic &c, 
     auto data = reinterpret_cast<const quint8 *>(value.constData());
     quint8 flags = *data;
 
+    // Errors
+    QString sysValue = "0x" + QString::number(data[1], 16).toUpper();
+    QString diaValue = "0x" + QString::number(data[3], 16).toUpper();
+    QString pulValue = "0x" + QString::number(data[7], 16).toUpper();
+
+    if (pulValue == "0x00" || pulValue == "0x08") {
+        setError("Pulse_Rate_Range_Error");
+    }
+    if (sysValue  == "0xFF" || sysValue == "0x07" ||
+        diaValue == "0xFF" || diaValue == "0x07" ||
+        pulValue == "0xFF" || pulValue == "0x07") {
+        setError("Measurement_Error");
+    }
+    // ===============
+
     if (flags & 0x1) {
         m_sys = static_cast<int>(qFromLittleEndian<quint16>(data[1]));
         m_dia = static_cast<int>(qFromLittleEndian<quint16>(data[3]));
